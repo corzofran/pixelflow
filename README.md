@@ -34,6 +34,18 @@ go test -race -count=3 ./...
 go test -cover ./...
 ```
 
+## Interfaz web
+
+```bash
+go run ./cmd/pixelflow-web          # abrir http://localhost:8080
+```
+
+Permite elegir filtros, goroutines por etapa, búfer y franjas; ver el progreso
+en vivo, comparar cada imagen antes/después con un deslizador, ver el tiempo
+por etapa y un historial con el speedup frente a la ejecución secuencial.
+Solo usa `net/http` y `embed`; Ctrl+C cancela la ejecución en curso y apaga el
+servidor de forma ordenada.
+
 Con `make`: `make build`, `make race`, `make cover`, `make demo`, `make bench`.
 
 ## Uso
@@ -103,6 +115,7 @@ bloqueante está en un `select` con `ctx.Done()`. Detalle completo en
 
 ```
 cmd/pixelflow     CLI: flags, señales (Ctrl+C), pprof, resumen
+cmd/pixelflow-web interfaz web local (net/http + embed)
 cmd/genimages     generador de imágenes sintéticas deterministas
 internal/filters  filtros puros + paralelismo por franjas (extensión)
 internal/pipeline Run (concurrente) y RunSequential (referencia)

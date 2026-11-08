@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PixelFlow · Pipeline concurrente de imágenes</title>
+<style>
+:root{
+  --bg:#0b1020; --panel:#121a2e; --panel2:#18223a; --line:#24304d; --ink:#e8edf7; --ink2:#a6b1c8; --muted:#6c7896;
+  --blue:#3987e5; --blue2:#2a78d6; --orange:#eb6834; --aqua:#1baf7a; --red:#e66767; --yellow:#eda100;
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Inter","Segoe UI",system-ui,sans-serif;font-size:14px}
+body{background:radial-gradient(1200px 500px at 85% -10%,#1b2e57 0%,transparent 60%),var(--bg);min-height:100vh}
+button,input,select{font:inherit;color:inherit}
+code,.mono{font-family:"JetBrains Mono","Cascadia Code",Consolas,monospace;font-size:12.5px}
+header{display:flex;align-items:center;gap:14px;padding:18px 28px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(11,16,32,.85);backdrop-filter:blur(10px);z-index:5}
+.logo{display:grid;grid-template-columns:repeat(3,7px);gap:2px}
+.logo i{width:7px;height:7px;border-radius:1.5px;background:var(--blue)}
+.logo i:nth-child(2),.logo i:nth-child(7){background:var(--orange)}.logo i:nth-child(5){background:var(--aqua)}.logo i:nth-child(3),.logo i:nth-child(9){background:#24456f}
+header h1{font-size:18px;margin:0;letter-spacing:-.01em}
+header .sub{color:var(--ink2);font-size:13px}
+.chips{margin-left:auto;display:flex;gap:8px}
+.chip{background:var(--panel2);border:1px solid var(--line);border-radius:30px;padding:5px 12px;font-size:12px;color:var(--ink2)}
+.chip b{color:var(--ink)}
+main{display:grid;grid-template-columns:330px 1fr;gap:20px;padding:22px 28px 40px;max-width:1500px;margin:0 auto}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:0 0 14px;font-weight:600}
+aside .card+.card{margin-top:16px}
+.field{margin-bottom:14px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+label{color:var(--ink2);font-size:13px}
+.val{font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink);min-width:38px;text-align:right}
+input[type=range]{width:100%;accent-color:var(--blue);margin-top:6px}
+.toggle{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;background:var(--panel2);transition:.15s}
+.toggle:hover{border-color:#34446b}
+.toggle input[type=checkbox]{accent-color:var(--blue);width:16px;height:16px}
+.toggle .name{flex:1}
+.toggle .extra{width:130px}
+.toggle.off .extra{opacity:.35;pointer-events:none}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{border:0;background:transparent;padding:8px;border-radius:8px;cursor:pointer;color:var(--ink2)}
+.seg button.on{background:var(--blue2);color:#fff;font-weight:600}
+.btn{border:0;border-radius:10px;padding:11px 14px;font-weight:600;cursor:pointer;width:100%;transition:.15s}
+.btn.primary{background:linear-gradient(135deg,var(--blue),#2462b8);color:#fff;box-shadow:0 6px 20px -8px #3987e5}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{background:transparent;border:1px solid #5a2b35;color:var(--red)}
+.btn.ghost{background:var(--panel2);border:1px solid var(--line);color:var(--ink)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btns{display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:6px}
+.spec{margin-top:10px;padding:8px 10px;border-radius:8px;background:#0d1426;border:1px dashed var(--line);color:var(--ink2);word-break:break-all}
+select,input[type=number]{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px;width:100%}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.check{display:flex;gap:8px;align-items:center;margin:10px 0;color:var(--ink2);font-size:13px}
+.check input{accent-color:var(--orange)}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;position:relative;overflow:hidden}
+.kpi .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.kpi .v{font-size:28px;font-weight:700;letter-spacing:-.02em;margin-top:4px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--ink2)}
+.kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--blue)}
+.kpi:nth-child(2)::before{background:var(--orange)}.kpi:nth-child(3)::before{background:var(--aqua)}.kpi:nth-child(4)::before{background:#6c7896}
+.status-pill{display:inline-flex;align-items:center;gap:7px;font-size:15px;font-weight:600;margin-top:10px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.running .dot{background:var(--aqua);box-shadow:0 0 0 0 rgba(27,175,122,.6);animation:pulse 1.2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 9px rgba(27,175,122,0)}100%{box-shadow:0 0 0 0 rgba(27,175,122,0)}}
+.progress{height:8px;background:var(--panel2);border-radius:10px;overflow:hidden;margin:4px 0 18px}
+.progress>div{height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--aqua));transition:width .25s}
+
+.pipe{display:grid;grid-template-columns:1fr auto 1fr auto 1fr auto 1fr;align-items:center;gap:8px;margin-bottom:16px}
+.stage{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center;position:relative}
+.stage .t{font-weight:600}
+.stage .w{font-size:12px;color:var(--ink2);margin-top:2px}
+.stage .workers{display:flex;gap:4px;justify-content:center;margin-top:8px;min-height:10px;flex-wrap:wrap}
+.stage .workers i{width:8px;height:8px;border-radius:2px;background:#2b3a5e}
+.running .stage .workers i{background:var(--blue);animation:blink 1s infinite}
+.running .stage .workers i:nth-child(2n){animation-delay:.25s}.running .stage .workers i:nth-child(3n){animation-delay:.5s}
+@keyframes blink{50%{opacity:.35}}
+.chan{display:flex;flex-direction:column;align-items:center;color:var(--muted);font-size:11px}
+.chan .arrow{width:46px;height:2px;background:var(--line);position:relative;overflow:hidden;margin:6px 0}
+.running .chan .arrow::after{content:"";position:absolute;left:-12px;top:0;width:12px;height:2px;background:var(--orange);animation:flow .8s linear infinite}
+@keyframes flow{to{left:46px}}
+
+.split{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;max-height:520px;overflow:auto;padding-right:4px}
+.thumb{position:relative;border-radius:9px;overflow:hidden;border:1px solid var(--line);cursor:pointer;aspect-ratio:4/3;background:#0d1426;animation:pop .3s ease}
+@keyframes pop{from{transform:scale(.9);opacity:0}}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb span{position:absolute;left:6px;bottom:5px;font-size:10.5px;background:rgba(0,0,0,.55);padding:1px 6px;border-radius:5px}
+.thumb:hover{border-color:var(--blue)}
+.empty{color:var(--muted);text-align:center;padding:40px 10px;border:1px dashed var(--line);border-radius:12px}
+
+.stagebars .b{display:grid;grid-template-columns:100px 1fr 60px;align-items:center;gap:10px;margin:8px 0;font-size:13px}
+.stagebars .track{height:12px;background:var(--panel2);border-radius:6px;overflow:hidden}
+.stagebars .fill{height:100%;border-radius:6px;transition:width .4s}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding:7px 6px;border-bottom:1px solid var(--line)}
+td{padding:7px 6px;border-bottom:1px solid #1b2440;font-variant-numeric:tabular-nums}
+td.n{text-align:right}
+.badge{font-size:11px;padding:2px 8px;border-radius:20px;background:#1d3354;color:#8fbcf2}
+.badge.seq{background:#3a2a20;color:#f2a07d}.badge.err{background:#3d1f26;color:var(--red)}.badge.can{background:#33301c;color:var(--yellow)}
+.bar{height:8px;border-radius:4px;background:var(--blue)}
+.err{background:#2b1520;border:1px solid #5a2b35;color:#ffb3b3;border-radius:10px;padding:10px 12px;margin-bottom:14px;display:none}
+.mt{margin-top:16px}
+
+.modal{position:fixed;inset:0;background:rgba(3,6,14,.85);display:none;align-items:center;justify-content:center;z-index:20;padding:30px}
+.modal.on{display:flex}
+.cmp{position:relative;max-width:min(1100px,92vw);max-height:80vh;border-radius:12px;overflow:hidden;user-select:none;box-shadow:0 30px 80px -20px #000}
+.cmp img{display:block;max-width:100%;max-height:80vh}
+.cmp .after{position:absolute;inset:0;overflow:hidden;width:50%}
+.cmp .after img{height:100%;width:auto;max-width:none}
+.cmp .handle{position:absolute;top:0;bottom:0;width:2px;background:#fff;left:50%;cursor:ew-resize}
+.cmp .handle::after{content:"⟷";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;color:#111;border-radius:50%;width:34px;height:34px;display:grid;place-items:center;font-weight:700}
+.cmp .lab{position:absolute;top:10px;padding:3px 10px;border-radius:6px;background:rgba(0,0,0,.6);font-size:12px}
+.mclose{position:absolute;top:18px;right:24px;font-size:28px;cursor:pointer;color:#fff;background:none;border:0}
+.mtitle{position:absolute;bottom:22px;color:var(--ink2)}
+@media (max-width:1000px){main{grid-template-columns:1fr}.split{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div><h1>PixelFlow</h1><div class="sub">Pipeline concurrente de imágenes en Go</div></div>
+  <div class="chips"><div class="chip">GOMAXPROCS <b id="gmp">–</b></div><div class="chip">CPUs <b id="cpus">–</b></div><div class="chip">Entrada <b id="nin">–</b> imágenes</div></div>
+</header>
+
+<main>
+<aside>
+  <div class="card">
+    <h2>Cadena de filtros</h2>
+    <label class="toggle"><input type="checkbox" id="fGray" checked><span class="name">Escala de grises</span></label>
+    <label class="toggle" id="tBlur"><input type="checkbox" id="fBlur" checked><span class="name">Desenfoque</span>
+      <span class="extra"><span class="row"><span style="font-size:12px;color:var(--muted)">radio</span><span class="val" id="vBlur">2</span></span><input type="range" id="blur" min="1" max="8" value="2"></span></label>
+    <label class="toggle" id="tRes"><input type="checkbox" id="fRes" checked><span class="name">Redimensionar</span>
+      <span class="extra"><span class="row"><span style="font-size:12px;color:var(--muted)">tamaño</span><span class="val" id="vRes">50%</span></span><input type="range" id="res" min="10" max="100" step="5" value="50"></span></label>
+    <label class="toggle"><input type="checkbox" id="fSobel"><span class="name">Bordes Sobel <span class="badge">extra</span></span></label>
+    <div class="spec mono" id="spec"></div>
+  </div>
+
+  <div class="card">
+    <h2>Concurrencia</h2>
+    <div class="field"><div class="seg"><button id="mConc" class="on">Concurrente</button><button id="mSeq">Secuencial</button></div></div>
+    <div class="field" id="wField"><div class="row"><label>Goroutines por etapa (D = W = E)</label><span class="val" id="vW">2</span></div><input type="range" id="workers" min="1" max="16" value="2"></div>
+    <div class="field" id="bField"><div class="row"><label>Búfer de cada canal</label><span class="val" id="vB">4</span></div><input type="range" id="buf" min="0" max="32" value="4"></div>
+    <div class="field"><div class="row"><label>Franjas por imagen</label><span class="val" id="vF">1</span></div><input type="range" id="franjas" min="1" max="8" value="1"></div>
+    <div class="btns"><button class="btn primary" id="run">▶ Ejecutar</button><button class="btn danger" id="cancel" disabled>Cancelar</button></div>
+  </div>
+
+  <div class="card">
+    <h2>Conjunto de entrada</h2>
+    <div class="grid2">
+      <div><label>Imágenes</label><input type="number" id="gN" value="60" min="1" max="500"></div>
+      <div><label>Tamaño</label><select id="gSize"><option value="320x240">320×240</option><option value="640x480">640×480</option><option value="800x600" selected>800×600</option><option value="1280x960">1280×960</option></select></div>
+    </div>
+    <label class="check"><input type="checkbox" id="gBad"> Incluir una imagen corrupta (prueba de errgroup)</label>
+    <button class="btn ghost" id="gen">Generar imágenes sintéticas</button>
+  </div>
+</aside>
+
+<section id="app">
+  <div class="err" id="err"></div>
+  <div class="kpis">
+    <div class="kpi"><div class="l">Progreso</div><div class="v" id="kProg">0 / 0</div><div class="s" id="kPct">0 %</div></div>
+    <div class="kpi"><div class="l">Tiempo</div><div class="v" id="kTime">0.00 s</div><div class="s" id="kMode">—</div></div>
+    <div class="kpi"><div class="l">Throughput</div><div class="v" id="kThr">0.0</div><div class="s">imágenes / segundo</div></div>
+    <div class="kpi"><div class="l">Estado</div><div class="status-pill" id="kState"><span class="dot"></span><span id="kStateT">En espera</span></div><div class="s" id="kSpeed"></div></div>
+  </div>
+  <div class="progress"><div id="bar"></div></div>
+
+  <div class="pipe" id="pipe">
+    <div class="stage"><div class="t">Listar</div><div class="w">1 goroutine</div><div class="workers"><i></i></div></div>
+    <div class="chan"><span>paths</span><div class="arrow"></div><span id="c1">cap 4</span></div>
+    <div class="stage"><div class="t">Decodificar</div><div class="w" id="sD">2 goroutines</div><div class="workers" id="wD"></div></div>
+    <div class="chan"><span>decoded</span><div class="arrow"></div><span id="c2">cap 4</span></div>
+    <div class="stage"><div class="t">Filtrar</div><div class="w" id="sW">2 goroutines</div><div class="workers" id="wW"></div></div>
+    <div class="chan"><span>filtered</span><div class="arrow"></div><span id="c3">cap 4</span></div>
+    <div class="stage"><div class="t">Codificar</div><div class="w" id="sE">2 goroutines</div><div class="workers" id="wE"></div></div>
+  </div>
+
+  <div class="split">
+    <div class="card">
+      <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Resultados · clic para comparar antes / después</h2><span class="chip" id="gCount">0</span></div>
+      <div class="gallery" id="gallery"><div class="empty">Pulse <b>Ejecutar</b> para procesar las imágenes.</div></div>
+    </div>
+    <div>
+      <div class="card">
+        <h2>Tiempo de CPU por etapa (última ejecución)</h2>
+        <div class="stagebars" id="stages"><div class="empty" style="padding:18px">Sin datos todavía</div></div>
+      </div>
+      <div class="card mt">
+        <div class="row" style="margin-bottom:6px"><h2 style="margin:0">Historial y speedup</h2><span style="font-size:12px;color:var(--muted)">speedup = T<sub>sec</sub> / T</span></div>
+        <table><thead><tr><th>#</th><th>Modo</th><th class="n">W</th><th class="n">Img</th><th class="n">Tiempo</th><th style="width:28%"></th><th class="n">Speedup</th></tr></thead><tbody id="hist"><tr><td colspan="7" style="color:var(--muted)">Ejecute primero en modo secuencial y luego con 1, 2, 4 y 8 goroutines para comparar.</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<div class="modal" id="modal">
+  <button class="mclose" id="mclose">×</button>
+  <div class="cmp" id="cmp">
+    <img id="imgBefore" alt="antes">
+    <div class="after" id="after"><img id="imgAfter" alt="después"></div>
+    <div class="handle" id="handle"></div>
+    <span class="lab" style="left:10px">Procesada</span><span class="lab" style="right:10px">Original</span>
+  </div>
+  <div class="mtitle mono" id="mtitle"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let seq = false, lastId = 0, shown = 0, wasRunning = false;
+
+function spec(){
+  const p = [];
+  if ($('fGray').checked) p.push('gray');
+  if ($('fBlur').checked) p.push('blur:' + $('blur').value);
+  if ($('fRes').checked) p.push('resize:' + $('res').value + '%');
+  if ($('fSobel').checked) p.push('sobel');
+  return p.join(',');
+}
+function dots(el, n){ el.innerHTML = '<i></i>'.repeat(Math.min(n, 16)); }
+function syncUI(){
+  $('vBlur').textContent = $('blur').value; $('vRes').textContent = $('res').value + '%';
+  $('tBlur').classList.toggle('off', !$('fBlur').checked); $('tRes').classList.toggle('off', !$('fRes').checked);
+  const w = seq ? 1 : +$('workers').value, b = seq ? 0 : +$('buf').value;
+  $('vW').textContent = $('workers').value; $('vB').textContent = $('buf').value; $('vF').textContent = $('franjas').value;
+  const s = spec() || '(vacía)';
+  $('spec').textContent = seq ? `pixelflow -secuencial -filtros ${s} -franjas ${$('franjas').value}`
+    : `pixelflow -filtros ${s} -workers ${w} -buf ${b} -franjas ${$('franjas').value}`;
+  for (const k of ['D','W','E']) { $('s'+k).textContent = seq ? 'secuencial' : `${w} goroutine${w>1?'s':''}`; dots($('w'+k), w); }
+  for (const c of ['c1','c2','c3']) $(c).textContent = seq ? 'sin canal' : 'cap ' + b;
+  $('wField').style.opacity = $('bField').style.opacity = seq ? .4 : 1;
+  $('pipe').style.opacity = seq ? .55 : 1;
+}
+document.querySelectorAll('input').forEach(i => i.addEventListener('input', syncUI));
+$('mConc').onclick = () => { seq = false; $('mConc').classList.add('on'); $('mSeq').classList.remove('on'); syncUI(); };
+$('mSeq').onclick = () => { seq = true; $('mSeq').classList.add('on'); $('mConc').classList.remove('on'); syncUI(); };
+
+function showErr(m){ const e = $('err'); e.textContent = m || ''; e.style.display = m ? 'block' : 'none'; }
+async function post(url, body){
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body||{})});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+$('run').onclick = async () => {
+  showErr('');
+  const f = spec(); if (!f) return showErr('Seleccione al menos un filtro.');
+  try {
+    await post('/api/run', {filtros: f, workers: seq ? 1 : +$('workers').value, buf: seq ? 0 : +$('buf').value, franjas: +$('franjas').value, secuencial: seq});
+    $('gallery').innerHTML = ''; shown = 0;
+  } catch(e){ showErr(e.message); }
+};
+$('cancel').onclick = () => post('/api/cancel').catch(e => showErr(e.message));
+$('gen').onclick = async () => {
+  showErr(''); const [w,h] = $('gSize').value.split('x').map(Number);
+  $('gen').disabled = true; $('gen').textContent = 'Generando…';
+  try {
+    await post('/api/generate', {n: +$('gN').value, w, h, corrupta: $('gBad').checked ? 3 : -1});
+    $('gallery').innerHTML = '<div class="empty">Conjunto nuevo listo. Pulse <b>Ejecutar</b>.</div>'; shown = 0; loadInputs();
+  } catch(e){ showErr(e.message); }
+  $('gen').disabled = false; $('gen').textContent = 'Generar imágenes sintéticas';
+};
+async function loadInputs(){ const j = await (await fetch('/api/inputs')).json(); $('nin').textContent = j.imagenes.length; }
+
+const COLORS = ['#6c7896','#1baf7a','#3987e5','#eb6834'], NAMES = ['Listar','Decodificar','Filtrar','Codificar'];
+function renderStages(h){
+  const tot = h.etapas.reduce((a,b) => a+b, 0) || 1;
+  $('stages').innerHTML = h.etapas.map((v,i) => `<div class="b"><span>${NAMES[i]}</span><div class="track"><div class="fill" style="width:${100*v/tot}%;background:${COLORS[i]}"></div></div><span class="mono" style="text-align:right">${(100*v/tot).toFixed(0)} %</span></div>`).join('')
+    + `<div style="font-size:12px;color:var(--muted);margin-top:8px">Máx. imágenes en memoria: <b style="color:var(--ink)">${h.max_en_vuelo}</b> · suma del tiempo de todas las goroutines de cada etapa</div>`;
+}
+function renderHist(hs){
+  if (!hs.length) return;
+  const base = [...hs].reverse().find(h => h.modo === 'secuencial' && h.estado === 'completa' && h.filtros === hs[hs.length-1].filtros);
+  const max = Math.max(...hs.map(h => h.segundos));
+  $('hist').innerHTML = [...hs].reverse().slice(0, 12).map(h => {
+    const badge = h.estado === 'error' ? '<span class="badge err">error</span>' : h.estado === 'cancelada' ? '<span class="badge can">cancelada</span>'
+      : h.modo === 'secuencial' ? '<span class="badge seq">secuencial</span>' : '<span class="badge">concurrente</span>';
+    const sp = base && h.estado === 'completa' && h.filtros === base.filtros ? (base.segundos / h.segundos).toFixed(2) + '×' : '—';
+    return `<tr><td>${h.id}</td><td>${badge}</td><td class="n">${h.modo==='secuencial'?'–':h.workers}</td><td class="n">${h.imagenes}</td><td class="n">${h.segundos.toFixed(2)} s</td>
+      <td><div class="bar" style="width:${100*h.segundos/max}%;background:${h.modo==='secuencial'?'#eb6834':'#3987e5'}"></div></td><td class="n"><b>${sp}</b></td></tr>`;
+  }).join('');
+}
+function addThumbs(names, id){
+  if (shown === 0 && names.length) $('gallery').innerHTML = '';
+  for (; shown < names.length; shown++) {
+    const n = names[shown], d = document.createElement('div');
+    d.className = 'thumb'; d.innerHTML = `<img loading="lazy" src="/img/out/${n}?r=${id}"><span>${n}</span>`;
+    d.onclick = () => openCmp(n, id); $('gallery').appendChild(d);
+  }
+  $('gCount').textContent = names.length;
+}
+async function poll(){
+  try {
+    const s = await (await fetch('/api/status')).json();
+    $('gmp').textContent = s.gomaxprocs; $('cpus').textContent = s.cpus;
+    if (s.id !== lastId) { lastId = s.id; shown = 0; }
+    addThumbs(s.salidas, s.id);
+    const pct = s.listadas ? 100 * s.procesadas / s.listadas : 0;
+    $('kProg').textContent = `${s.procesadas} / ${s.listadas}`; $('kPct').textContent = pct.toFixed(0) + ' %';
+    $('bar').style.width = pct + '%';
+    $('kTime').textContent = s.segundos.toFixed(2) + ' s';
+    $('kThr').textContent = s.segundos > 0 ? (s.procesadas / s.segundos).toFixed(1) : '0.0';
+    $('app').classList.toggle('running', s.running);
+    $('run').disabled = s.running; $('gen').disabled = s.running; $('cancel').disabled = !s.running;
+    const last = s.historial[s.historial.length - 1];
+    $('kStateT').textContent = s.running ? 'Procesando…' : last ? ({completa:'Completada', cancelada:'Cancelada', error:'Error'})[last.estado] : 'En espera';
+    $('kMode').textContent = last || s.running ? (s.running ? 'en curso' : `${last.modo} · ${last.filtros}`) : '—';
+    if (!s.running && last) {
+      renderStages(last); renderHist(s.historial);
+      const base = [...s.historial].reverse().find(h => h.modo === 'secuencial' && h.estado === 'completa' && h.filtros === last.filtros);
+      $('kSpeed').textContent = base && last.estado === 'completa' ? `speedup ${(base.segundos/last.segundos).toFixed(2)}× vs secuencial` : '';
+      if (wasRunning && last.estado === 'error') showErr('El primer error canceló todo el pipeline (errgroup): ' + s.error);
+    }
+    wasRunning = s.running;
+  } catch(e) {}
+  setTimeout(poll, wasRunning ? 200 : 600);
+}
+
+// Comparador antes / después
+function openCmp(n, id){
+  $('imgBefore').src = `/img/in/${n}`; $('imgAfter').src = `/img/out/${n}?r=${id}`;
+  $('mtitle').textContent = n + ' · ' + ($('kMode').textContent); $('modal').classList.add('on'); setPos(.5);
+}
+function setPos(p){ $('after').style.width = (p*100)+'%'; $('handle').style.left = (p*100)+'%';
+  $('imgAfter').style.width = $('imgBefore').getBoundingClientRect().width + 'px'; }
+$('imgBefore').onload = () => setPos(.5);
+let drag = false;
+$('cmp').addEventListener('pointerdown', e => { drag = true; move(e); });
+window.addEventListener('pointerup', () => drag = false);
+window.addEventListener('pointermove', e => drag && move(e));
+function move(e){ const r = $('cmp').getBoundingClientRect(); setPos(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))); }
+$('mclose').onclick = () => $('modal').classList.remove('on');
+$('modal').onclick = e => { if (e.target.id === 'modal') $('modal').classList.remove('on'); };
+document.addEventListener('keydown', e => e.key === 'Escape' && $('modal').classList.remove('on'));
+
+syncUI(); loadInputs(); poll();
+</script>
+</body>
+</html>
