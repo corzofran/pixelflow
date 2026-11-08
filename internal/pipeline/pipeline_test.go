@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/fcorzo/pixelflow/internal/filters"
+	"github.com/fcorzo/pixelflow/internal/imgio"
 	"github.com/fcorzo/pixelflow/internal/synth"
 )
 
@@ -82,7 +83,7 @@ func TestConcurrentMatchesSequential(t *testing.T) {
 	in := dataset(t, 24)
 	chain := mustChain(t, "gray,blur:2,resize:50%")
 	seqOut := filepath.Join(t.TempDir(), "seq")
-	st, err := RunSequential(context.Background(), Config{InputDir: in, OutputDir: seqOut, Chain: chain})
+	st, err := RunSequential(context.Background(), Config{Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(seqOut, 90), Chain: chain})
 	if err != nil || st.Processed != 24 {
 		t.Fatalf("secuencial: %v, %d procesadas", err, st.Processed)
 	}
@@ -95,7 +96,7 @@ func TestConcurrentMatchesSequential(t *testing.T) {
 				t.Run(name, func(t *testing.T) {
 					out := filepath.Join(t.TempDir(), "out")
 					st, err := Run(context.Background(), Config{
-						InputDir: in, OutputDir: out, Chain: chain,
+						Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(out, 90), Chain: chain,
 						Decoders: w, Workers: w, Encoders: w, Buffer: buf, Strips: strips,
 					})
 					if err != nil {
@@ -130,7 +131,7 @@ func TestEachImageExactlyOnce(t *testing.T) {
 	var mu sync.Mutex
 	seen := map[int]int{}
 	cfg := Config{
-		InputDir: in, OutputDir: filepath.Join(t.TempDir(), "out"),
+		Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(filepath.Join(t.TempDir(), "out"), 90),
 		Chain:    mustChain(t, "gray,blur:1"),
 		Decoders: 16, Workers: 32, Encoders: 16, Buffer: 2,
 		OnResult: func(r Result) {
@@ -162,7 +163,7 @@ func TestEachImageExactlyOnce(t *testing.T) {
 func TestBackpressureBound(t *testing.T) {
 	checkNoLeaks(t)
 	st, err := Run(context.Background(), Config{
-		InputDir: dataset(t, 40), OutputDir: filepath.Join(t.TempDir(), "out"),
+		Source: imgio.DirSource{Dir: dataset(t, 40)}, Sink: imgio.NewDirSink(filepath.Join(t.TempDir(), "out"), 90),
 		Chain: mustChain(t, "blur:3"), Decoders: 1, Workers: 1, Encoders: 1, Buffer: 1,
 	})
 	if err != nil {
@@ -184,7 +185,7 @@ func TestFirstErrorCancelsAll(t *testing.T) {
 	}
 	for _, w := range []int{1, 4} {
 		st, err := Run(context.Background(), Config{
-			InputDir: in, OutputDir: filepath.Join(t.TempDir(), "out"),
+			Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(filepath.Join(t.TempDir(), "out"), 90),
 			Chain: mustChain(t, "gray"), Decoders: w, Workers: w, Encoders: w, Buffer: 1,
 		})
 		if err == nil || !strings.Contains(err.Error(), "img_0005.jpg") {
@@ -198,7 +199,7 @@ func TestFirstErrorCancelsAll(t *testing.T) {
 		}
 	}
 	_, err := RunSequential(context.Background(), Config{
-		InputDir: in, OutputDir: filepath.Join(t.TempDir(), "s"), Chain: mustChain(t, "gray"),
+		Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(filepath.Join(t.TempDir(), "s"), 90), Chain: mustChain(t, "gray"),
 	})
 	if err == nil {
 		t.Fatal("la versión secuencial también debe fallar")
@@ -216,8 +217,9 @@ func TestCancellationStopsQuickly(t *testing.T) {
 	defer cancel()
 	var done atomic.Int32
 	var cancelledAt atomic.Int64
+	outDir := filepath.Join(t.TempDir(), "out")
 	cfg := Config{
-		InputDir: in, OutputDir: filepath.Join(t.TempDir(), "out"),
+		Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(outDir, 90),
 		Chain:    mustChain(t, "gray,blur:4"),
 		Decoders: 2, Workers: 4, Encoders: 2, Buffer: 2,
 		OnResult: func(Result) {
@@ -239,7 +241,7 @@ func TestCancellationStopsQuickly(t *testing.T) {
 		t.Fatalf("tardó %v en detenerse tras la cancelación", stopped)
 	}
 	// No quedan temporales a medio escribir.
-	matches, _ := filepath.Glob(filepath.Join(cfg.OutputDir, ".pixelflow-*"))
+	matches, _ := filepath.Glob(filepath.Join(outDir, ".pixelflow-*"))
 	if len(matches) != 0 {
 		t.Fatalf("quedaron temporales: %v", matches)
 	}
@@ -250,11 +252,11 @@ func TestDeadlineAndPreCancelled(t *testing.T) {
 	in := dataset(t, 30)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	st, err := Run(ctx, Config{InputDir: in, OutputDir: filepath.Join(t.TempDir(), "a"), Chain: mustChain(t, "gray")})
+	st, err := Run(ctx, Config{Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(filepath.Join(t.TempDir(), "a"), 90), Chain: mustChain(t, "gray")})
 	if !errors.Is(err, context.Canceled) || st.Processed != 0 {
 		t.Fatalf("contexto ya cancelado: err=%v procesadas=%d", err, st.Processed)
 	}
-	_, err = RunSequential(ctx, Config{InputDir: in, OutputDir: filepath.Join(t.TempDir(), "b"), Chain: mustChain(t, "gray")})
+	_, err = RunSequential(ctx, Config{Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(filepath.Join(t.TempDir(), "b"), 90), Chain: mustChain(t, "gray")})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("secuencial con contexto cancelado: %v", err)
 	}
@@ -262,7 +264,7 @@ func TestDeadlineAndPreCancelled(t *testing.T) {
 	dctx, dcancel := context.WithTimeout(context.Background(), time.Millisecond)
 	defer dcancel()
 	<-dctx.Done()
-	_, err = Run(dctx, Config{InputDir: in, OutputDir: filepath.Join(t.TempDir(), "c"), Chain: mustChain(t, "blur:5")})
+	_, err = Run(dctx, Config{Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(filepath.Join(t.TempDir(), "c"), 90), Chain: mustChain(t, "blur:5")})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("se esperaba DeadlineExceeded, se obtuvo %v", err)
 	}
@@ -273,9 +275,12 @@ func TestConfigErrors(t *testing.T) {
 	chain := mustChain(t, "gray")
 	tmp := t.TempDir()
 	cases := []Config{
-		{OutputDir: tmp, Chain: chain},
-		{InputDir: tmp, Chain: chain},
-		{InputDir: tmp, OutputDir: tmp},
+		{Sink: imgio.NewDirSink(tmp, 90), Chain: chain},
+		{Source: imgio.DirSource{Dir: tmp}, Chain: chain},
+		{Source: imgio.DirSource{Dir: tmp}, Sink: imgio.NewDirSink(tmp, 90), Chain: chain, Workers: -1},
+		{Source: imgio.DirSource{Dir: tmp}, Sink: imgio.NewDirSink(tmp, 90), Chain: chain, Buffer: MaxBuffer + 1},
+		{Source: imgio.DirSource{Dir: tmp}, Sink: imgio.NewDirSink(tmp, 90), Chain: chain, Strips: MaxStrips + 1},
+		{Source: imgio.DirSource{Dir: tmp}, Sink: imgio.NewDirSink(tmp, 90)},
 	}
 	for i, c := range cases {
 		if _, err := Run(context.Background(), c); err == nil {
@@ -285,14 +290,14 @@ func TestConfigErrors(t *testing.T) {
 			t.Errorf("caso %d: RunSequential debía fallar", i)
 		}
 	}
-	missing := Config{InputDir: filepath.Join(tmp, "no-existe"), OutputDir: filepath.Join(tmp, "o"), Chain: chain}
+	missing := Config{Source: imgio.DirSource{Dir: filepath.Join(tmp, "no-existe")}, Sink: imgio.NewDirSink(filepath.Join(tmp, "o"), 90), Chain: chain}
 	if _, err := Run(context.Background(), missing); err == nil {
 		t.Error("carpeta inexistente: Run debía fallar")
 	}
 	if _, err := RunSequential(context.Background(), missing); err == nil {
 		t.Error("carpeta inexistente: RunSequential debía fallar")
 	}
-	empty := Config{InputDir: tmp, OutputDir: filepath.Join(tmp, "o2"), Chain: chain}
+	empty := Config{Source: imgio.DirSource{Dir: tmp}, Sink: imgio.NewDirSink(filepath.Join(tmp, "o2"), 90), Chain: chain}
 	if st, err := Run(context.Background(), empty); err != nil || st.Processed != 0 {
 		t.Errorf("carpeta vacía: err=%v procesadas=%d", err, st.Processed)
 	}
@@ -308,7 +313,7 @@ func TestStageNamesAndOrder(t *testing.T) {
 	var mu sync.Mutex
 	var got []string
 	_, err := Run(context.Background(), Config{
-		InputDir: in, OutputDir: filepath.Join(t.TempDir(), "o"), Chain: mustChain(t, "gray"), Workers: 3,
+		Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(filepath.Join(t.TempDir(), "o"), 90), Chain: mustChain(t, "gray"), Workers: 3,
 		OnResult: func(r Result) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -335,7 +340,7 @@ func TestOnStageOrder(t *testing.T) {
 		var mu sync.Mutex
 		seen := map[int][]Stage{}
 		cfg := Config{
-			InputDir: in, OutputDir: filepath.Join(t.TempDir(), "o"), Chain: mustChain(t, "gray"),
+			Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(filepath.Join(t.TempDir(), "o"), 90), Chain: mustChain(t, "gray"),
 			Decoders: 3, Workers: 5, Encoders: 3, Buffer: 1,
 			OnStage: func(s Stage, i int) {
 				mu.Lock()

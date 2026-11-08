@@ -500,19 +500,15 @@ $('mClose').onclick = closeM; $('modal').onclick = e => e.target.id === 'modal' 
 addEventListener('keydown', e => e.key === 'Escape' && closeM());
 
 /* ---------- paso 5: rendimiento ---------- */
-const mean = a => a.reduce((x,y) => x+y, 0) / a.length;
-const sd = a => a.length < 2 ? 0 : Math.sqrt(a.reduce((x,y) => x + (y - mean(a))**2, 0) / (a.length - 1));
 $('bench').onclick = async () => { showErr(''); try { await api('POST', '/api/medir', {filtros: filtros(), reps: +$('reps').value, buf: +$('rQ').value}); poll(true); } catch(x){ showErr(x.message); } };
 $('benchStop').onclick = () => api('POST', '/api/cancelar').catch(() => {});
+// El análisis (speedup, eficiencia, ajuste de Amdahl) lo calcula el
+// servidor con el paquete bench; aquí solo se adapta para dibujar.
 function benchModel(m){
-  const rows = m.filas.filter(f => f.tiempos.length);
-  const seqRow = rows.find(f => f.p === 0); if (!seqRow) return null;
-  const T = mean(seqRow.tiempos), cpus = st.cpus;
-  const pts = rows.filter(f => f.p > 0).map(f => { const t = mean(f.tiempos), s = sd(f.tiempos), S = T / t;
-    const rel = Math.hypot(sd(seqRow.tiempos)/T, s/t); return {p: f.p, t, s, S, err: S*rel, n: f.tiempos.length}; });
-  const fitPt = [...pts].filter(x => x.p > 1 && x.p <= cpus).sort((a,b) => b.p - a.p)[0];
-  let f = null; if (fitPt) f = Math.min(1, Math.max(0, (fitPt.p / fitPt.S - 1) / (fitPt.p - 1)));
-  return {T, Tsd: sd(seqRow.tiempos), n: seqRow.tiempos.length, pts, f, fitP: fitPt?.p, cpus};
+  const r = m.resumen; if (!r) return null;
+  return {T: r.secuencial.media, Tsd: r.secuencial.sd, n: r.secuencial.n, cpus: r.cpus,
+    pts: r.puntos.map(q => ({p: q.p, t: q.media, s: q.sd, S: q.speedup, err: q.speedup_err, n: q.n})),
+    f: r.f >= 0 ? r.f : null, fitP: r.p_ajuste, pred: r.prediccion || {}, max: r.maximo};
 }
 function chartSVG(M){
   const W = 560, H = 330, L = 46, R = 16, Tp = 16, B = 44, maxY = 8;
@@ -525,7 +521,7 @@ function chartSVG(M){
   g += `<line x1="${x(1)}" y1="${y(1)}" x2="${x(8)}" y2="${y(8)}" stroke="#7A8796" stroke-width="1.5" stroke-dasharray="4 4"/>`;
   if (M.f !== null) { let d = ''; for (let p = 1; p <= 8.001; p += .1) d += (d ? 'L' : 'M') + x(p).toFixed(1) + ',' + y(1/(M.f + (1-M.f)/p)).toFixed(1);
     g += `<path d="${d}" fill="none" stroke="#B7791F" stroke-width="2.5"/>`; }
-  const pts = M.pts.sort((a,b) => a.p - b.p);
+  const pts = [...M.pts].sort((a,b) => a.p - b.p);
   g += `<path d="${pts.map((q,i) => (i?'L':'M') + x(q.p) + ',' + y(q.S)).join('')}" fill="none" stroke="#1F4E8C" stroke-width="2.5"/>`;
   for (const q of pts) g += `<line x1="${x(q.p)}" x2="${x(q.p)}" y1="${y(q.S+q.err)}" y2="${y(Math.max(0,q.S-q.err))}" stroke="#1F4E8C"/><circle cx="${x(q.p)}" cy="${y(q.S)}" r="5" fill="#1F4E8C" stroke="#fff" stroke-width="1.5"/><text x="${x(q.p)}" y="${y(q.S)+20}" text-anchor="middle" font-size="12" font-weight="600" fill="#15202B">${q.S.toFixed(2)}×</text>`;
   const lg = [['#7A8796','Ideal (lineal)','4 4'], ['#B7791F', M.f !== null ? `Amdahl, f = ${(100*M.f).toFixed(1)} %` : 'Amdahl (requiere ≥ 2 núcleos)', ''], ['#1F4E8C','Medido ± 1σ','']];
@@ -539,17 +535,17 @@ function renderBench(m){
   $('bStat').textContent = running ? `${m.actual}, paso ${m.paso} de ${m.total}` : m.estado === 'cancelada' ? 'Medición detenida.' : m.estado === 'error' ? 'La medición se detuvo por un error: ' + m.error : '';
   const M = benchModel(m); $('csv').disabled = !M || running;
   if (!M) return;
-  $('bLead').textContent = `${m.imagenes} imágenes, ${chainLabel(m.filtros).join(', ')}, ${M.n} repetición(es).`;
+  $('bLead').textContent = `${m.imagenes} imágenes, ${chainLabel(m.filtros).join(', ')}, ${M.n} repetición(es). Cálculo hecho en Go (paquete bench).`;
   $('btab').innerHTML = `<tr><td>Secuencial</td><td class="r">${M.T.toFixed(3)} s</td><td class="r">${M.n > 1 ? M.Tsd.toFixed(3) : '—'}</td><td class="r">1.00×</td><td class="r">—</td></tr>` +
     M.pts.map(q => `<tr><td>P = ${q.p}</td><td class="r">${q.t.toFixed(3)} s</td><td class="r">${q.n > 1 ? q.s.toFixed(3) : '—'}</td><td class="r"><b>${q.S.toFixed(2)}×</b></td><td class="r">${Math.round(100*q.S/q.p)} %</td></tr>`).join('');
   $('chart').innerHTML = chartSVG(M);
-  const best = [...M.pts].sort((a,b) => b.S - a.S)[0], am = p => 1/(M.f + (1-M.f)/p);
+  const best = [...M.pts].sort((a,b) => b.S - a.S)[0];
   const s2 = M.pts.find(q => q.p === Math.min(M.cpus, 8));
   $('reading').hidden = running || !best;
   if (!best) return;
   $('reading').innerHTML = `<h2>Lectura de los resultados</h2>
     <p>El mejor tiempo fue con <b>P = ${best.p}</b>: ${best.t.toFixed(2)} s frente a ${M.T.toFixed(2)} s de la versión secuencial, un speedup de <b>${best.S.toFixed(2)}×</b>.</p>
-    ${M.f !== null ? `<p>Con el speedup medido en P = ${M.fitP}, la ley de Amdahl estima que <b>${(100*M.f).toFixed(1)} %</b> del trabajo es serial (listado, llenado y vaciado del pipeline, recolección de basura y sincronización). Con esa fracción predice ${am(4).toFixed(2)}× con 4 núcleos, ${am(8).toFixed(2)}× con 8 y un máximo teórico de ${(1/Math.max(M.f,1e-6)).toFixed(1)}×.</p>` : ''}
+    ${M.f !== null ? `<p>Con el speedup medido en P = ${M.fitP}, la ley de Amdahl estima que <b>${(100*M.f).toFixed(1)} %</b> del trabajo es serial (listado, llenado y vaciado del pipeline, recolección de basura y sincronización). Con esa fracción predice ${M.pred[4].toFixed(2)}× con 4 núcleos, ${M.pred[8].toFixed(2)}× con 8 y ${M.max > 0 ? `un máximo teórico de ${M.max.toFixed(1)}×` : 'ningún límite teórico'}.</p>` : ''}
     ${M.cpus < 8 ? `<p>Este equipo tiene ${M.cpus} núcleos. Con GOMAXPROCS mayor que ${M.cpus} no hay más procesadores para repartir el trabajo, así que el speedup se estanca o baja levemente por el costo de planificar más goroutines. Para verificar la predicción con 4 y 8, repita la medición en un equipo con al menos 8 núcleos.</p>` : ''}
     <p>${M.pts.find(q => q.p === 1) ? `Con P = 1 el pipeline tarda ${M.pts.find(q => q.p === 1).t.toFixed(2)} s; la diferencia con la versión secuencial es el costo de canales y goroutines.` : ''}</p>`;
   $('d5').textContent = `speedup ${best.S.toFixed(2)}× con P = ${best.p}`;

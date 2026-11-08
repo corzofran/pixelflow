@@ -2,17 +2,17 @@ goos: linux
 goarch: amd64
 pkg: github.com/fcorzo/pixelflow/internal/filters
 cpu: Intel(R) Xeon(R) Processor @ 2.30GHz
-BenchmarkFilters/gray-2         	     854	   1436754 ns/op	 1925216 B/op	       3 allocs/op
-BenchmarkFilters/gray-2         	     776	   1375322 ns/op	 1925216 B/op	       3 allocs/op
-BenchmarkFilters/gray-2         	     850	   1337972 ns/op	 1925216 B/op	       3 allocs/op
-BenchmarkFilters/blur2-2        	     105	  11081653 ns/op	 3877760 B/op	       7 allocs/op
-BenchmarkFilters/blur2-2        	     100	  11552434 ns/op	 3877760 B/op	       7 allocs/op
-BenchmarkFilters/blur2-2        	     111	  11244841 ns/op	 3877760 B/op	       7 allocs/op
-BenchmarkFilters/resize50-2     	    4134	    293755 ns/op	  486656 B/op	       4 allocs/op
-BenchmarkFilters/resize50-2     	    3691	    300415 ns/op	  486656 B/op	       4 allocs/op
-BenchmarkFilters/resize50-2     	    3812	    303288 ns/op	  486656 B/op	       4 allocs/op
-BenchmarkFilters/sobel-2        	      92	  12644248 ns/op	 5767360 B/op	       6 allocs/op
-BenchmarkFilters/sobel-2        	      92	  13364850 ns/op	 5767360 B/op	       6 allocs/op
-BenchmarkFilters/sobel-2        	      90	  13158299 ns/op	 5767360 B/op	       6 allocs/op
+BenchmarkFilters/gray-2         	     873	   1600302 ns/op	 1925217 B/op	       3 allocs/op
+BenchmarkFilters/gray-2         	     723	   1436322 ns/op	 1925216 B/op	       3 allocs/op
+BenchmarkFilters/gray-2         	     774	   1564731 ns/op	 1925216 B/op	       3 allocs/op
+BenchmarkFilters/blur2-2        	     100	  11629267 ns/op	 3877760 B/op	       7 allocs/op
+BenchmarkFilters/blur2-2        	      97	  12153547 ns/op	 3877760 B/op	       7 allocs/op
+BenchmarkFilters/blur2-2        	     102	  12423960 ns/op	 3877760 B/op	       7 allocs/op
+BenchmarkFilters/resize50-2     	    3559	    370879 ns/op	  486656 B/op	       4 allocs/op
+BenchmarkFilters/resize50-2     	    3320	    391937 ns/op	  486656 B/op	       4 allocs/op
+BenchmarkFilters/resize50-2     	    3288	    366199 ns/op	  486656 B/op	       4 allocs/op
+BenchmarkFilters/sobel-2        	      79	  13226046 ns/op	 5767360 B/op	       6 allocs/op
+BenchmarkFilters/sobel-2        	      84	  14649622 ns/op	 5767360 B/op	       6 allocs/op
+BenchmarkFilters/sobel-2        	      88	  14147849 ns/op	 5767360 B/op	       6 allocs/op
 PASS
-ok  	github.com/fcorzo/pixelflow/internal/filters	17.246s
+ok  	github.com/fcorzo/pixelflow/internal/filters	17.990s

@@ -1,6 +1,7 @@
 package imgio
 
 import (
+	"context"
 	"image"
 	"image/color"
 	"os"
@@ -74,5 +75,41 @@ func TestErrorsAndNames(t *testing.T) {
 	}
 	if !IsImage("A.PNG") || IsImage("a.gif") {
 		t.Error("IsImage")
+	}
+}
+
+func TestDirAdapters(t *testing.T) {
+	dir := t.TempDir()
+	img := image.NewRGBA(image.Rect(0, 0, 4, 3))
+	if err := Encode(filepath.Join(dir, "x.png"), img, FormatPNG, 90); err != nil {
+		t.Fatal(err)
+	}
+	src := DirSource{Dir: dir}
+	ids, err := src.List(context.Background())
+	if err != nil || len(ids) != 1 {
+		t.Fatalf("%v %v", ids, err)
+	}
+	if _, f, err := src.Decode(ids[0]); err != nil || f != FormatPNG {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := src.List(ctx); err == nil {
+		t.Fatal("List con contexto cancelado debía fallar")
+	}
+	out := filepath.Join(dir, "sub", "salida")
+	sink := NewDirSink(out, 0) // 0 → calidad por omisión
+	ref, err := sink.Encode(ids[0], img, FormatJPEG)
+	if err != nil || ref != filepath.Join(out, "x.jpg") {
+		t.Fatalf("%s %v", ref, err)
+	}
+	blocked := filepath.Join(dir, "archivo")
+	os.WriteFile(blocked, nil, 0o644)
+	bad := NewDirSink(filepath.Join(blocked, "no"), 90)
+	if _, err := bad.Encode(ids[0], img, FormatPNG); err == nil {
+		t.Fatal("debía fallar al crear la carpeta")
+	}
+	if _, err := bad.Encode(ids[0], img, FormatPNG); err == nil {
+		t.Fatal("el error de creación debe recordarse (sync.Once)")
 	}
 }

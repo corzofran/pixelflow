@@ -20,7 +20,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fcorzo/pixelflow/internal/bench"
 	"github.com/fcorzo/pixelflow/internal/filters"
+	"github.com/fcorzo/pixelflow/internal/imgio"
 	"github.com/fcorzo/pixelflow/internal/pipeline"
 )
 
@@ -45,6 +47,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		seq      = fs.Bool("secuencial", false, "usar la versión secuencial de referencia")
 		cpuprof  = fs.String("cpuprofile", "", "escribir perfil de CPU en este archivo")
 		quiet    = fs.Bool("q", false, "no imprimir cada imagen procesada")
+		medir    = fs.Int("medir", 0, "medir speedup: N repeticiones de secuencial y GOMAXPROCS 1, 2, 4, 8")
 	)
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -84,9 +87,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	cfg := pipeline.Config{
-		InputDir: *in, OutputDir: *out, Chain: chain,
+		Source: imgio.DirSource{Dir: *in}, Sink: imgio.NewDirSink(*out, *quality), Chain: chain,
 		Decoders: *decoders, Workers: *workers, Encoders: *encoders,
-		Buffer: *buffer, Strips: *strips, Quality: *quality,
+		Buffer: *buffer, Strips: *strips,
+	}
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 2
+	}
+	if *medir > 0 {
+		return measure(ctx, cfg, *medir, stdout, stderr)
 	}
 	if !*quiet {
 		// OnResult se invoca desde varias goroutines codificadoras. Un
@@ -145,4 +155,33 @@ func printStats(w io.Writer, s pipeline.Stats) {
 		}
 		fmt.Fprintf(w, "  %-12s %10v  %5.1f %%\n", pipeline.Stage(st), b.Round(time.Millisecond), pct)
 	}
+}
+
+// measure ejecuta la medición de speedup (paquete bench) e imprime la tabla y
+// el ajuste de Amdahl. Las salidas se escriben en una carpeta temporal.
+func measure(ctx context.Context, cfg pipeline.Config, reps int, stdout, stderr io.Writer) int {
+	newSink := func() (pipeline.Sink, func(), error) {
+		dir, err := os.MkdirTemp("", "pixelflow-medir-")
+		return imgio.NewDirSink(dir, 90), func() { os.RemoveAll(dir) }, err
+	}
+	fmt.Fprintf(stdout, "Midiendo %d repeticiones de %d configuraciones (filtros=%s, buf=%d)\n", reps, len(bench.Default), cfg.Chain, cfg.Buffer)
+	rows, err := bench.Run(ctx, bench.Default, reps, bench.PipelineRunner(cfg, newSink),
+		func(step, total int, c bench.Config, rep int) {
+			fmt.Fprintf(stdout, "  [%2d/%d] %-10s repetición %d\n", step, total, c.Label, rep)
+		})
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	s, _ := bench.Summarize(rows, runtime.NumCPU())
+	fmt.Fprintf(stdout, "\n%-12s %10s %9s %9s %10s\n", "config", "media (s)", "σ (s)", "speedup", "eficiencia")
+	fmt.Fprintf(stdout, "%-12s %10.3f %9.3f %8.2f× %10s\n", "secuencial", s.Sequential.Mean, s.Sequential.SD, 1.0, "—")
+	for _, p := range s.Points {
+		fmt.Fprintf(stdout, "%-12s %10.3f %9.3f %8.2f× %9.0f%%\n", fmt.Sprintf("P = %d", p.Procs), p.Mean, p.SD, p.Speedup, 100*p.Efficiency)
+	}
+	if s.SerialFraction >= 0 {
+		fmt.Fprintf(stdout, "\nAmdahl (ajuste con P = %d de %d núcleos): f = %.1f %%, predice %.2f× con 4, %.2f× con 8, máximo %.1f×\n",
+			s.FitProcs, s.CPUs, 100*s.SerialFraction, s.Predicted[4], s.Predicted[8], s.MaxSpeedup)
+	}
+	return 0
 }

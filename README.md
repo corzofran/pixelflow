@@ -81,6 +81,7 @@ pixelflow [flags]
   -secuencial      usar la versión secuencial de referencia
   -cpuprofile F    escribir perfil de CPU (pprof)
   -q               no imprimir cada archivo
+  -medir N         medir speedup con N repeticiones (secuencial, P = 1, 2, 4, 8)
 ```
 
 Códigos de salida: `0` éxito · `1` error de procesamiento · `2` flags inválidas ·
@@ -127,24 +128,34 @@ Todas las goroutines se crean con `errgroup.WithContext`; todo envío/recepción
 bloqueante está en un `select` con `ctx.Done()`. Detalle completo en
 [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md).
 
-## Estructura
+## Estructura y arquitectura
+
+Arquitectura en capas con puertos y adaptadores; detalle en
+[`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) y decisiones en
+[`docs/adr/`](docs/adr/).
 
 ```
-cmd/pixelflow     CLI: flags, señales (Ctrl+C), pprof, resumen
-cmd/pixelflow-web interfaz web local (net/http + embed)
-cmd/genimages     generador de imágenes sintéticas deterministas
-internal/filters  filtros puros + paralelismo por franjas (extensión)
-internal/pipeline Run (concurrente) y RunSequential (referencia)
-internal/imgio    listar / decodificar / codificar (escritura atómica)
-internal/synth    imágenes sintéticas para pruebas y benchmarks
-scripts/bench.sh  reproduce todos los experimentos → results/
-results/          datos crudos de los experimentos del informe
+cmd/pixelflow       CLI: flags, Ctrl+C, pprof, -medir
+cmd/pixelflow-web   servidor web: solo compone las capas y apaga en orden
+cmd/genimages       generador de imágenes sintéticas
+internal/web        adaptador HTTP: rutas, JSON, middleware, interfaz (ui/)
+internal/app        casos de uso de la interfaz (sin HTTP), errores tipados
+internal/bench      medición de speedup y ajuste de Amdahl (CLI y web)
+internal/pipeline   motor concurrente; puertos Source y Sink; Config.Validate
+internal/filters    filtros puros + franjas paralelas
+internal/imgio      adaptadores de disco DirSource / DirSink
+internal/synth      imágenes sintéticas para pruebas
+scripts/            bench.sh y plots.py: reproducen los experimentos
+results/            datos crudos del informe
+.github/workflows/  CI: gofmt, vet, go test -race -count=3
 ```
 
 ## Experimentos
 
 ```bash
 ./scripts/bench.sh 5        # 5 repeticiones; ~6 min en 2 vCPU
+# medición rápida desde la CLI (secuencial y GOMAXPROCS 1, 2, 4, 8):
+./bin/pixelflow -in data/in -medir 3
 # o solo los benchmarks de go test con GOMAXPROCS = 1, 2, 4, 8:
 go test ./internal/pipeline -run '^$' -bench Pipeline -cpu 1,2,4,8 -count 5 -benchmem
 ```

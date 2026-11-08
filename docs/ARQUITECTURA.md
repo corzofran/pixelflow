@@ -1,4 +1,36 @@
-# Arquitectura concurrente de PixelFlow
+# Arquitectura de PixelFlow
+
+## Capas y dependencias
+
+Las dependencias apuntan siempre hacia adentro (de la interfaz al dominio).
+Ningún paquete interno importa a uno de una capa exterior; las decisiones
+están en [`docs/adr/`](adr/).
+
+```
+cmd/pixelflow        cmd/pixelflow-web          composición: flags, señales, slog
+     │                     │
+     │               internal/web               adaptador HTTP + middleware
+     │                     │
+     │               internal/app               casos de uso (sin HTTP)
+     ├─────────────┬───────┘
+internal/bench     │                            medición de speedup y Amdahl
+     └──────► internal/pipeline                 motor concurrente
+                   │  puertos: Source, Sink
+        ┌──────────┴──────────┐
+internal/filters        internal/imgio          dominio puro · adaptadores de disco
+```
+
+| Paquete | Responsabilidad | No sabe de |
+|---|---|---|
+| `filters` | filtros puros sobre `*image.RGBA` | archivos, goroutines del pipeline |
+| `pipeline` | etapas, canales, errgroup, métricas; puertos `Source`/`Sink`; `Config.Validate` | disco, HTTP |
+| `imgio` | adaptadores `DirSource`/`DirSink`, escritura atómica | `pipeline` (satisface sus interfaces implícitamente) |
+| `bench` | repeticiones intercaladas, media/σ, speedup, ajuste de Amdahl | HTTP, interfaz |
+| `app` | imágenes de entrada, ejecuciones, mediciones, estado; errores tipados | `net/http` |
+| `web` | rutas, JSON, códigos HTTP, middleware (recuperación, registro, cabeceras) | reglas de negocio |
+| `cmd/*` | leer flags, armar dependencias, apagar en orden | lógica |
+
+# Arquitectura concurrente
 
 ## Goroutines
 
@@ -12,6 +44,8 @@
 | codificador | E (`-encoders`) | `stage()` vía `errgroup` | `filtered` cerrado y vacío, error de escritura o `ctx` cancelado |
 | franja | `-franjas` por imagen | `filters.forRows` | al procesar su franja; `forRows` espera con `WaitGroup` |
 | señales | 1 (runtime) | `signal.NotifyContext` en `main` | `stop()` diferido en `main` |
+| servidor HTTP | 1 + 1 por petición | `main` de `pixelflow-web` / `net/http` | `Shutdown` con plazo de 5 s |
+| trabajo de la web | 0 o 1 | `app.Service.StartRun` o `StartMeasure` | el pipeline regresa; cierra `done` |
 
 `Run` no regresa hasta `g.Wait()`, que espera a **todas** las goroutines del
 grupo. Por eso ninguna puede sobrevivir a la llamada.
@@ -39,6 +73,8 @@ múltiple es imposible.
 | Contadores y máximo en vuelo | `sync/atomic` (`Add`, `CompareAndSwap`) | `Mutex`: contención innecesaria en la ruta caliente |
 | Callback de progreso en la CLI | `sync.Mutex` | sin protección: carrera detectada por `-race` (ver informe) |
 | Paralelismo dentro de una imagen | franjas + `WaitGroup` | un pool global de franjas: acoplaría etapas y complicaría la cancelación |
+| Estado de la interfaz web | `sync.Mutex` + instantáneas copiadas | `RWMutex`: las escrituras por imagen son tan frecuentes como las lecturas |
+| Avance en vivo en la web | consulta periódica de `/api/estado` | WebSockets/SSE: goroutines por conexión que hay que cerrar al apagar |
 
 ## Contrapresión
 

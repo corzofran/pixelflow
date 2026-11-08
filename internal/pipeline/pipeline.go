@@ -17,6 +17,11 @@
 //   - Los canales tienen búfer acotado (Config.Buffer): si los codificadores
 //     son lentos, las etapas anteriores se bloquean (contrapresión) en lugar de
 //     acumular imágenes decodificadas en memoria.
+//
+// Arquitectura (puertos y adaptadores): el pipeline no conoce el sistema de
+// archivos. Lee mediante el puerto Source y escribe mediante el puerto Sink;
+// imgio.DirSource e imgio.DirSink son los adaptadores de disco y las pruebas
+// usan adaptadores en memoria.
 package pipeline
 
 import (
@@ -24,7 +29,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,21 +36,40 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/fcorzo/pixelflow/internal/filters"
-	"github.com/fcorzo/pixelflow/internal/imgio"
+)
+
+// Source es el puerto de entrada: enumera las imágenes en orden estable y
+// las decodifica. Decode se invoca desde varias goroutines a la vez, así que
+// las implementaciones deben ser seguras para uso concurrente.
+type Source interface {
+	List(ctx context.Context) ([]string, error)
+	Decode(id string) (img image.Image, format string, err error)
+}
+
+// Sink es el puerto de salida: guarda una imagen procesada y devuelve una
+// referencia a dónde quedó. También se invoca concurrentemente.
+type Sink interface {
+	Encode(id string, img image.Image, format string) (ref string, err error)
+}
+
+// Límites que acepta Validate.
+const (
+	MaxGoroutines = 256
+	MaxBuffer     = 4096
+	MaxStrips     = 64
 )
 
 // Config parametriza una ejecución del pipeline.
 type Config struct {
-	InputDir  string
-	OutputDir string
-	Chain     filters.Chain
+	Source Source
+	Sink   Sink
+	Chain  filters.Chain
 
 	Decoders int // goroutines de decodificación (E/S + CPU)
 	Workers  int // goroutines de filtrado (CPU)
 	Encoders int // goroutines de codificación (CPU + E/S)
 	Buffer   int // capacidad de cada canal intermedio
 	Strips   int // franjas paralelas dentro de cada imagen (extensión)
-	Quality  int // calidad JPEG de salida (1-100)
 
 	// OnResult, si no es nil, se invoca tras escribir cada imagen. Se llama
 	// desde varias goroutines codificadoras a la vez: debe ser segura para
@@ -107,7 +130,7 @@ type Stats struct {
 
 type job struct {
 	index int
-	path  string
+	id    string
 }
 
 type decoded struct {
@@ -146,21 +169,43 @@ func (c *counters) track(s Stage, start time.Time) {
 	c.busy[s].Add(int64(time.Since(start)))
 }
 
-func (c *Config) normalize() error {
-	if c.InputDir == "" || c.OutputDir == "" {
-		return errors.New("se requieren carpeta de entrada y de salida")
-	}
-	if len(c.Chain) == 0 {
+// Validate comprueba la configuración. Los valores cero de Decoders,
+// Workers, Encoders y Strips significan 1. Es la única validación del
+// sistema: la CLI y la interfaz web la reutilizan.
+func (c Config) Validate() error {
+	switch {
+	case c.Source == nil:
+		return errors.New("falta el origen de las imágenes")
+	case c.Sink == nil:
+		return errors.New("falta el destino de las imágenes")
+	case len(c.Chain) == 0:
 		return errors.New("la cadena de filtros está vacía")
+	}
+	for _, g := range []struct {
+		name string
+		v    int
+	}{{"las goroutines de decodificación", c.Decoders}, {"las goroutines de filtrado", c.Workers}, {"las goroutines de codificación", c.Encoders}} {
+		if g.v < 0 || g.v > MaxGoroutines {
+			return fmt.Errorf("%s deben estar entre 1 y %d", g.name, MaxGoroutines)
+		}
+	}
+	if c.Buffer < 0 || c.Buffer > MaxBuffer {
+		return fmt.Errorf("la capacidad de los canales debe estar entre 0 y %d", MaxBuffer)
+	}
+	if c.Strips < 0 || c.Strips > MaxStrips {
+		return fmt.Errorf("las franjas deben estar entre 1 y %d", MaxStrips)
+	}
+	return nil
+}
+
+func (c *Config) normalize() error {
+	if err := c.Validate(); err != nil {
+		return err
 	}
 	c.Decoders = max(1, c.Decoders)
 	c.Workers = max(1, c.Workers)
 	c.Encoders = max(1, c.Encoders)
-	c.Buffer = max(0, c.Buffer)
 	c.Strips = max(1, c.Strips)
-	if c.Quality <= 0 || c.Quality > 100 {
-		c.Quality = 90
-	}
 	return nil
 }
 
@@ -170,9 +215,6 @@ func (c *Config) normalize() error {
 func Run(ctx context.Context, cfg Config) (Stats, error) {
 	if err := cfg.normalize(); err != nil {
 		return Stats{}, err
-	}
-	if err := os.MkdirAll(cfg.OutputDir, 0o755); err != nil {
-		return Stats{}, fmt.Errorf("crear carpeta de salida: %w", err)
 	}
 
 	start := time.Now()
@@ -212,7 +254,7 @@ func Run(ctx context.Context, cfg Config) (Stats, error) {
 // hace quien lo lanzó (único responsable).
 func lister(ctx context.Context, cfg *Config, out chan<- job, cnt *counters) error {
 	t := time.Now()
-	list, err := imgio.List(cfg.InputDir)
+	list, err := cfg.Source.List(ctx)
 	cnt.track(StageList, t)
 	if err != nil {
 		return err
@@ -223,7 +265,7 @@ func lister(ctx context.Context, cfg *Config, out chan<- job, cnt *counters) err
 		// podría notificar StageDecode antes que el lister (orden invertido).
 		cfg.notify(StageList, i)
 		select {
-		case out <- job{index: i, path: p}:
+		case out <- job{index: i, id: p}:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -247,7 +289,7 @@ func decodeWorker(ctx context.Context, cfg *Config, in <-chan job, out chan<- de
 			return ctx.Err()
 		}
 		t := time.Now()
-		img, format, err := imgio.Decode(j.path)
+		img, format, err := cfg.Source.Decode(j.id)
 		cnt.track(StageDecode, t)
 		if err != nil {
 			return err
@@ -301,8 +343,7 @@ func encodeWorker(ctx context.Context, cfg *Config, in <-chan filtered, cnt *cou
 			return ctx.Err()
 		}
 		t := time.Now()
-		outPath := imgio.OutputName(cfg.OutputDir, f.path, f.format)
-		err := imgio.Encode(outPath, f.img, f.format, cfg.Quality)
+		outPath, err := cfg.Sink.Encode(f.id, f.img, f.format)
 		cnt.track(StageEncode, t)
 		cnt.leave()
 		if err != nil {
@@ -311,7 +352,7 @@ func encodeWorker(ctx context.Context, cfg *Config, in <-chan filtered, cnt *cou
 		cnt.processed.Add(1)
 		cfg.notify(StageEncode, f.index)
 		if cfg.OnResult != nil {
-			cfg.OnResult(Result{Index: f.index, Input: f.path, Output: outPath})
+			cfg.OnResult(Result{Index: f.index, Input: f.id, Output: outPath})
 		}
 	}
 }
@@ -364,13 +405,10 @@ func RunSequential(ctx context.Context, cfg Config) (Stats, error) {
 	if err := cfg.normalize(); err != nil {
 		return Stats{}, err
 	}
-	if err := os.MkdirAll(cfg.OutputDir, 0o755); err != nil {
-		return Stats{}, fmt.Errorf("crear carpeta de salida: %w", err)
-	}
 	start := time.Now()
 	var cnt counters
 	t := time.Now()
-	list, err := imgio.List(cfg.InputDir)
+	list, err := cfg.Source.List(ctx)
 	cnt.track(StageList, t)
 	if err != nil {
 		return Stats{}, err
@@ -382,7 +420,7 @@ func RunSequential(ctx context.Context, cfg Config) (Stats, error) {
 		}
 		cfg.notify(StageList, i)
 		t = time.Now()
-		img, format, err := imgio.Decode(p)
+		img, format, err := cfg.Source.Decode(p)
 		cnt.track(StageDecode, t)
 		if err != nil {
 			return cnt.snapshot(time.Since(start)), err
@@ -393,8 +431,7 @@ func RunSequential(ctx context.Context, cfg Config) (Stats, error) {
 		cnt.track(StageFilter, t)
 		cfg.notify(StageFilter, i)
 		t = time.Now()
-		outPath := imgio.OutputName(cfg.OutputDir, p, format)
-		err = imgio.Encode(outPath, out, format, cfg.Quality)
+		outPath, err := cfg.Sink.Encode(p, out, format)
 		cnt.track(StageEncode, t)
 		if err != nil {
 			return cnt.snapshot(time.Since(start)), err

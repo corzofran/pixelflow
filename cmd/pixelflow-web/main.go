@@ -4,11 +4,10 @@
 //	./bin/pixelflow-web                 → abrir http://localhost:8080
 //	./bin/pixelflow-web -addr localhost:9090 -data data/web
 //
-// Flujo de la interfaz: 1) cargar imágenes, 2) configurar filtros y
-// concurrencia, 3) ejecutar y observar las etapas en vivo, 4) revisar y
-// descargar resultados, 5) medir el speedup con GOMAXPROCS = 1, 2, 4 y 8.
+// Este archivo solo cablea las capas (composition root):
 //
-// Solo usa la biblioteca estándar (net/http, embed, archive/zip).
+//	cmd/pixelflow-web → internal/web (HTTP) → internal/app (casos de uso)
+//	  → internal/pipeline + internal/bench → internal/filters, internal/imgio
 package main
 
 import (
@@ -16,7 +15,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,24 +23,40 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/fcorzo/pixelflow/internal/app"
+	"github.com/fcorzo/pixelflow/internal/web"
 )
 
 func main() {
 	addr := flag.String("addr", "localhost:8080", "dirección de escucha")
 	data := flag.String("data", filepath.Join("data", "web"), "carpeta de trabajo (entrada/, salida/, medicion/)")
+	verbose := flag.Bool("v", false, "registro detallado (nivel debug)")
 	flag.Parse()
 
-	s, err := newServer(*data)
-	if err != nil {
-		log.Fatal(err)
+	level := slog.LevelInfo
+	if *verbose {
+		level = slog.LevelDebug
 	}
-	srv := &http.Server{Addr: *addr, Handler: s.routes(), ReadHeaderTimeout: 10 * time.Second}
+	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+
+	svc, err := app.New(*data)
+	if err != nil {
+		log.Error("no se pudo preparar la carpeta de trabajo", "error", err)
+		os.Exit(1)
+	}
+	srv := &http.Server{
+		Addr:              *addr,
+		Handler:           web.New(svc, log),
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	// Goroutine del servidor HTTP. Dueño: main. Termina cuando Shutdown
-	// cierra el listener (o si no puede escuchar); avisa por errc.
+	// cierra el listener (o si no puede escuchar) y avisa por errc.
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
 
@@ -53,18 +68,19 @@ func main() {
 
 	select {
 	case err := <-errc:
-		log.Fatal(err)
+		log.Error("el servidor no pudo iniciar", "error", err)
+		os.Exit(1)
 	case <-ctx.Done():
 	}
 	fmt.Println("\nDeteniendo: se cancela el trabajo en curso…")
-	s.stopJob()
+	svc.Stop()
 	shCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shCtx); err != nil {
-		log.Println("apagado:", err)
+		log.Warn("apagado con plazo vencido", "error", err)
 	}
 	if err := <-errc; err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Println(err)
+		log.Error("servidor", "error", err)
 	}
 	fmt.Println("Detenido.")
 }

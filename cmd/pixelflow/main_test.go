@@ -71,3 +71,20 @@ func TestCLIErrors(t *testing.T) {
 		t.Fatalf("el error debe nombrar el archivo: %s", se.String())
 	}
 }
+
+func TestCLIMeasure(t *testing.T) {
+	in := filepath.Join(t.TempDir(), "in")
+	if _, err := synth.WriteSet(in, 4, 24, 16, 1); err != nil {
+		t.Fatal(err)
+	}
+	var so, se bytes.Buffer
+	if code := run([]string{"-in", in, "-filtros", "gray", "-medir", "1"}, &so, &se); code != 0 {
+		t.Fatalf("código %d: %s", code, se.String())
+	}
+	if !strings.Contains(so.String(), "P = 8") || !strings.Contains(so.String(), "secuencial") {
+		t.Fatalf("salida:\n%s", so.String())
+	}
+	if code := run([]string{"-in", in, "-workers", "9999"}, &so, &se); code != 2 {
+		t.Fatalf("workers fuera de rango: código %d", code)
+	}
+}

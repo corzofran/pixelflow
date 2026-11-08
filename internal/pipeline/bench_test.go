@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/fcorzo/pixelflow/internal/imgio"
 	"github.com/fcorzo/pixelflow/internal/synth"
 )
 
@@ -51,7 +52,7 @@ func BenchmarkPipeline(b *testing.B) {
 	b.Run("secuencial", func(b *testing.B) {
 		out := b.TempDir()
 		for i := 0; i < b.N; i++ {
-			if _, err := RunSequential(context.Background(), Config{InputDir: in, OutputDir: out, Chain: chain}); err != nil {
+			if _, err := RunSequential(context.Background(), Config{Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(out, 90), Chain: chain}); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -62,7 +63,7 @@ func BenchmarkPipeline(b *testing.B) {
 			out := b.TempDir()
 			for i := 0; i < b.N; i++ {
 				_, err := Run(context.Background(), Config{
-					InputDir: in, OutputDir: out, Chain: chain,
+					Source: imgio.DirSource{Dir: in}, Sink: imgio.NewDirSink(out, 90), Chain: chain,
 					Decoders: w, Workers: w, Encoders: w, Buffer: 4,
 				})
 				if err != nil {

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 330" font-family="Inter" font-size="10">
+<defs><marker id="k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d2b45"/></marker>
+<marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#eb6834"/></marker></defs>
+<!-- bands -->
+<g font-size="9" fill="#52514e">
+<rect x="0" y="4" width="760" height="62" rx="8" fill="#f5f7fa"/><text x="10" y="20" font-weight="600" fill="#1d2b45">Interfaz y composición</text>
+<rect x="0" y="74" width="760" height="62" rx="8" fill="#eef3fa"/><text x="10" y="90" font-weight="600" fill="#1d2b45">Casos de uso</text>
+<rect x="0" y="144" width="760" height="78" rx="8" fill="#e6eef8"/><text x="10" y="160" font-weight="600" fill="#1d2b45">Motor concurrente</text>
+<rect x="0" y="230" width="760" height="96" rx="8" fill="#f5f7fa"/><text x="10" y="246" font-weight="600" fill="#1d2b45">Dominio y adaptadores</text>
+</g>
+<g font-size="9.5">
+<!-- row 1 -->
+<rect x="150" y="18" width="150" height="38" rx="6" fill="#1d2b45"/><text x="225" y="34" text-anchor="middle" fill="#fff" font-weight="600">cmd/pixelflow</text><text x="225" y="47" text-anchor="middle" fill="#c9d3e3" font-size="8.5">CLI · flags · -medir · pprof</text>
+<rect x="330" y="18" width="150" height="38" rx="6" fill="#1d2b45"/><text x="405" y="34" text-anchor="middle" fill="#fff" font-weight="600">cmd/pixelflow-web</text><text x="405" y="47" text-anchor="middle" fill="#c9d3e3" font-size="8.5">composición · slog · apagado</text>
+<rect x="510" y="18" width="160" height="38" rx="6" fill="#fff" stroke="#2a78d6" stroke-width="1.3"/><text x="590" y="34" text-anchor="middle" fill="#1d2b45" font-weight="600">internal/web</text><text x="590" y="47" text-anchor="middle" fill="#52514e" font-size="8.5">HTTP · JSON · middleware · ui</text>
+<!-- row 2 -->
+<rect x="510" y="88" width="160" height="38" rx="6" fill="#fff" stroke="#2a78d6" stroke-width="1.3"/><text x="590" y="104" text-anchor="middle" fill="#1d2b45" font-weight="600">internal/app</text><text x="590" y="117" text-anchor="middle" fill="#52514e" font-size="8.5">servicio · errores tipados · Mutex</text>
+<rect x="250" y="88" width="160" height="38" rx="6" fill="#fff" stroke="#2a78d6" stroke-width="1.3"/><text x="330" y="104" text-anchor="middle" fill="#1d2b45" font-weight="600">internal/bench</text><text x="330" y="117" text-anchor="middle" fill="#52514e" font-size="8.5">repeticiones · σ · speedup · Amdahl</text>
+<!-- row 3 -->
+<rect x="250" y="160" width="420" height="52" rx="6" fill="#2a78d6"/><text x="460" y="178" text-anchor="middle" fill="#fff" font-weight="600">internal/pipeline</text><text x="460" y="192" text-anchor="middle" fill="#e6f0fc" font-size="8.5">etapas · canales acotados · errgroup · Config.Validate</text>
+<rect x="268" y="194" width="92" height="14" rx="7" fill="#fff"/><text x="314" y="204" text-anchor="middle" fill="#1d2b45" font-size="8" font-weight="600">puerto Source</text>
+<rect x="560" y="194" width="92" height="14" rx="7" fill="#fff"/><text x="606" y="204" text-anchor="middle" fill="#1d2b45" font-size="8" font-weight="600">puerto Sink</text>
+<!-- row 4 -->
+<rect x="150" y="262" width="150" height="48" rx="6" fill="#fff" stroke="#1d2b45"/><text x="225" y="280" text-anchor="middle" fill="#1d2b45" font-weight="600">internal/filters</text><text x="225" y="294" text-anchor="middle" fill="#52514e" font-size="8.5">funciones puras · franjas</text>
+<rect x="330" y="262" width="170" height="48" rx="6" fill="#fff" stroke="#1d2b45"/><text x="415" y="280" text-anchor="middle" fill="#1d2b45" font-weight="600">internal/imgio</text><text x="415" y="294" text-anchor="middle" fill="#52514e" font-size="8.5">DirSource · DirSink (disco)</text>
+<rect x="530" y="262" width="140" height="48" rx="6" fill="#fff" stroke="#1d2b45" stroke-dasharray="4 3"/><text x="600" y="280" text-anchor="middle" fill="#1d2b45" font-weight="600">memSource · memSink</text><text x="600" y="294" text-anchor="middle" fill="#52514e" font-size="8.5">adaptadores de prueba</text>
+</g>
+<g stroke="#1d2b45" stroke-width="1.2" fill="none" marker-end="url(#k)">
+<path d="M405,56 C405,62 470,62 508,40"/>
+<path d="M590,56 V86"/>
+<path d="M510,107 H412"/>
+<path d="M590,126 V158"/>
+<path d="M330,126 V158"/>
+<path d="M225,56 C225,90 250,95 248,105"/>
+<path d="M200,56 V260"/>
+<path d="M330,212 C330,236 260,240 250,260"/>
+</g>
+<g stroke="#eb6834" stroke-width="1.2" fill="none" stroke-dasharray="3 2" marker-end="url(#o)">
+<path d="M380,262 C370,240 330,232 318,210"/>
+<path d="M470,262 C520,240 580,232 600,210"/>
+<path d="M600,262 V212"/>
+</g>
+<text x="612" y="240" fill="#eb6834" font-size="8.5" font-weight="600">implementan los puertos</text>
+<text x="750" y="40" fill="#52514e" font-size="8.5" text-anchor="end">→ depende de</text>
+</svg>

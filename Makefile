@@ -1,7 +1,8 @@
-.PHONY: build test race cover data demo bench clean
+.PHONY: build test race cover data demo bench clean web
 build:
 	go build -o bin/pixelflow ./cmd/pixelflow
 	go build -o bin/genimages ./cmd/genimages
+	go build -o bin/pixelflow-web ./cmd/pixelflow-web
 test:
 	go vet ./... && test -z "$$(gofmt -l . | grep -v ^vendor/)" && go test ./...
 race:
@@ -16,3 +17,5 @@ bench:
 	./scripts/bench.sh 5
 clean:
 	rm -rf bin data coverage.out
+web: build
+	./bin/pixelflow-web

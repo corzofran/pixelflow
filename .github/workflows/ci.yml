@@ -1,0 +1,18 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Formato
+        run: test -z "$(gofmt -l . | grep -v ^vendor/)"
+      - name: go vet
+        run: go vet ./...
+      - name: Pruebas con detector de carreras (3 veces)
+        run: go test -race -count=3 ./...
+      - name: Cobertura
+        run: go test -cover ./internal/...
