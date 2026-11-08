@@ -1,0 +1,5 @@
+# equipo
+Linux 6.18.44-fc-v310 x86_64
+2
+model name	: Intel(R) Xeon(R) Processor @ 2.30GHz
+go version go1.24.7 linux/amd64

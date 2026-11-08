@@ -1,0 +1,39 @@
+File: pixelflow
+Build ID: 5063906624dc8974c4f22a8692d9572d4d2c93f7
+Type: cpu
+Time: 2026-11-08 10:18:01 CST
+Duration: 2.39s, Total samples = 4.32s (180.94%)
+Showing nodes accounting for 4.11s, 95.14% of 4.32s total
+Dropped 60 nodes (cum <= 0.02s)
+Showing top 30 nodes out of 83
+      flat  flat%   sum%        cum   cum%
+     1.07s 24.77% 24.77%      1.25s 28.94%  compress/flate.(*compressor).findMatch
+     0.64s 14.81% 39.58%      0.65s 15.05%  github.com/fcorzo/pixelflow/internal/filters.BoxBlur.func2
+     0.56s 12.96% 52.55%      0.60s 13.89%  github.com/fcorzo/pixelflow/internal/filters.BoxBlur.func1
+     0.18s  4.17% 56.71%      0.18s  4.17%  compress/flate.matchLen (inline)
+     0.18s  4.17% 60.88%      0.18s  4.17%  image/jpeg.(*decoder).receiveExtend
+     0.13s  3.01% 63.89%      0.13s  3.01%  image/internal/imageutil.DrawYCbCr
+     0.12s  2.78% 66.67%      0.13s  3.01%  github.com/fcorzo/pixelflow/internal/filters.Grayscale.func1
+     0.11s  2.55% 69.21%      0.28s  6.48%  image/png.(*decoder).readImagePass
+     0.11s  2.55% 71.76%      0.24s  5.56%  image/png.filter
+     0.09s  2.08% 73.84%      1.40s 32.41%  compress/flate.(*compressor).deflate
+     0.09s  2.08% 75.93%      0.17s  3.94%  image/jpeg.(*decoder).reconstructBlock
+     0.08s  1.85% 77.78%      0.09s  2.08%  compress/flate.(*decompressor).huffSym
+     0.08s  1.85% 79.63%      0.08s  1.85%  image/jpeg.idct
+     0.08s  1.85% 81.48%      0.08s  1.85%  runtime.memclrNoHeapPointers
+     0.06s  1.39% 82.87%      0.51s 11.81%  image/jpeg.(*decoder).processSOS
+     0.06s  1.39% 84.26%      0.08s  1.85%  image/png.paeth
+     0.05s  1.16% 85.42%      0.10s  2.31%  image/jpeg.(*decoder).decodeHuffman
+     0.05s  1.16% 86.57%      0.05s  1.16%  image/jpeg.div (inline)
+     0.04s  0.93% 87.50%      0.04s  0.93%  github.com/fcorzo/pixelflow/internal/filters.Resize.func1
+     0.04s  0.93% 88.43%      0.04s  0.93%  hash/adler32.update
+     0.04s  0.93% 89.35%      0.05s  1.16%  image/jpeg.(*decoder).ensureNBits
+     0.04s  0.93% 90.28%      0.04s  0.93%  image/png.abs8 (inline)
+     0.04s  0.93% 91.20%      0.04s  0.93%  internal/runtime/syscall.Syscall6
+     0.03s  0.69% 91.90%      0.14s  3.24%  compress/flate.(*decompressor).huffmanBlock
+     0.03s  0.69% 92.59%      0.04s  0.93%  compress/flate.(*huffmanBitWriter).writeTokens
+     0.03s  0.69% 93.29%      0.03s  0.69%  github.com/fcorzo/pixelflow/internal/filters.clamp (inline)
+     0.03s  0.69% 93.98%      0.11s  2.55%  image/jpeg.(*encoder).writeBlock
+     0.03s  0.69% 94.68%      0.03s  0.69%  runtime.asyncPreempt
+     0.01s  0.23% 94.91%      0.03s  0.69%  image/jpeg.rgbaToYCbCr
+     0.01s  0.23% 95.14%      1.67s 38.66%  image/png.(*encoder).writeImage

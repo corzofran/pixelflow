@@ -1,0 +1,49 @@
+File: pixelflow
+Build ID: 5063906624dc8974c4f22a8692d9572d4d2c93f7
+Type: cpu
+Time: 2026-11-08 10:18:01 CST
+Duration: 2.39s, Total samples = 4.32s (180.94%)
+Showing nodes accounting for 3.10s, 71.76% of 4.32s total
+Dropped 60 nodes (cum <= 0.02s)
+Showing top 40 nodes out of 83
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%      4.30s 99.54%  github.com/fcorzo/pixelflow/internal/pipeline.stage.func1
+         0     0%     0%      4.30s 99.54%  golang.org/x/sync/errgroup.(*Group).Go.func1
+         0     0%     0%      1.86s 43.06%  github.com/fcorzo/pixelflow/internal/imgio.Encode
+         0     0%     0%      1.86s 43.06%  github.com/fcorzo/pixelflow/internal/pipeline.Run.func6
+         0     0%     0%      1.86s 43.06%  github.com/fcorzo/pixelflow/internal/pipeline.encodeWorker
+         0     0%     0%      1.67s 38.66%  image/png.(*Encoder).Encode
+         0     0%     0%      1.67s 38.66%  image/png.(*encoder).writeIDATs
+     0.01s  0.23%  0.23%      1.67s 38.66%  image/png.(*encoder).writeImage
+         0     0%  0.23%      1.65s 38.19%  github.com/fcorzo/pixelflow/internal/pipeline.Run.func5
+         0     0%  0.23%      1.65s 38.19%  github.com/fcorzo/pixelflow/internal/pipeline.filterWorker
+         0     0%  0.23%      1.49s 34.49%  github.com/fcorzo/pixelflow/internal/filters.Chain.Apply (inline)
+         0     0%  0.23%      1.42s 32.87%  compress/zlib.(*Writer).Write
+         0     0%  0.23%      1.42s 32.87%  github.com/fcorzo/pixelflow/internal/filters.forRows
+         0     0%  0.23%      1.40s 32.41%  compress/flate.(*Writer).Write (inline)
+     0.09s  2.08%  2.31%      1.40s 32.41%  compress/flate.(*compressor).deflate
+         0     0%  2.31%      1.40s 32.41%  compress/flate.(*compressor).write
+         0     0%  2.31%      1.32s 30.56%  github.com/fcorzo/pixelflow/internal/filters.BoxBlur
+         0     0%  2.31%      1.32s 30.56%  github.com/fcorzo/pixelflow/internal/filters.Parse.func1
+     1.07s 24.77% 27.08%      1.25s 28.94%  compress/flate.(*compressor).findMatch
+         0     0% 27.08%      0.79s 18.29%  github.com/fcorzo/pixelflow/internal/imgio.Decode
+         0     0% 27.08%      0.79s 18.29%  github.com/fcorzo/pixelflow/internal/pipeline.Run.func3
+         0     0% 27.08%      0.79s 18.29%  github.com/fcorzo/pixelflow/internal/pipeline.decodeWorker
+         0     0% 27.08%      0.79s 18.29%  image.Decode
+     0.64s 14.81% 41.90%      0.65s 15.05%  github.com/fcorzo/pixelflow/internal/filters.BoxBlur.func2
+     0.56s 12.96% 54.86%      0.60s 13.89%  github.com/fcorzo/pixelflow/internal/filters.BoxBlur.func1
+         0     0% 54.86%      0.51s 11.81%  image/jpeg.(*decoder).decode
+     0.06s  1.39% 56.25%      0.51s 11.81%  image/jpeg.(*decoder).processSOS
+         0     0% 56.25%      0.51s 11.81%  image/jpeg.Decode
+         0     0% 56.25%      0.28s  6.48%  image/png.(*decoder).decode
+         0     0% 56.25%      0.28s  6.48%  image/png.(*decoder).parseChunk
+         0     0% 56.25%      0.28s  6.48%  image/png.(*decoder).parseIDAT
+     0.11s  2.55% 58.80%      0.28s  6.48%  image/png.(*decoder).readImagePass
+         0     0% 58.80%      0.28s  6.48%  image/png.Decode
+     0.11s  2.55% 61.34%      0.24s  5.56%  image/png.filter
+     0.18s  4.17% 65.51%      0.18s  4.17%  compress/flate.matchLen (inline)
+     0.18s  4.17% 69.68%      0.18s  4.17%  image/jpeg.(*decoder).receiveExtend
+         0     0% 69.68%      0.17s  3.94%  compress/zlib.(*reader).Read
+     0.09s  2.08% 71.76%      0.17s  3.94%  image/jpeg.(*decoder).reconstructBlock
+         0     0% 71.76%      0.17s  3.94%  io.ReadAtLeast
+         0     0% 71.76%      0.17s  3.94%  io.ReadFull (inline)
