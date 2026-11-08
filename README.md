@@ -37,14 +37,30 @@ go test -cover ./...
 ## Interfaz web
 
 ```bash
-go run ./cmd/pixelflow-web          # abrir http://localhost:8080
+go build -o bin/pixelflow-web ./cmd/pixelflow-web     # en Windows: bin\pixelflow-web.exe
+./bin/pixelflow-web                                   # abrir http://localhost:8080
 ```
 
-Permite elegir filtros, goroutines por etapa, búfer y franjas; ver el progreso
-en vivo, comparar cada imagen antes/después con un deslizador, ver el tiempo
-por etapa y un historial con el speedup frente a la ejecución secuencial.
-Solo usa `net/http` y `embed`; Ctrl+C cancela la ejecución en curso y apaga el
-servidor de forma ordenada.
+Flujo en cinco pasos:
+
+1. **Imágenes**: arrastre sus fotos JPEG/PNG (o agregue ejemplos sintéticos y,
+   para la demostración de errgroup, un archivo dañado).
+2. **Configuración**: filtros en orden, goroutines por etapa, capacidad de los
+   canales y franjas; muestra la cota de memoria D + W + E + 2·buf y el comando
+   equivalente de la CLI.
+3. **Ejecución**: cinco carriles en vivo (en espera, decodificar, filtrar,
+   codificar, terminadas) que muestran la contrapresión; botón Cancelar.
+4. **Resultados**: galería con comparador antes/después, tiempo por etapa,
+   historial con speedup y descarga en ZIP.
+5. **Rendimiento**: mide la versión secuencial y GOMAXPROCS = 1, 2, 4 y 8 con
+   repeticiones, grafica el speedup frente a Amdahl y exporta CSV.
+
+Solo usa la biblioteca estándar. Un `sync.Mutex` protege el estado del
+servidor, hay a lo más un trabajo a la vez y Ctrl+C cancela el trabajo en curso
+antes de apagar.
+
+> **Windows con Smart App Control:** si `go run` muestra *An Application Control
+> policy has blocked this file*, compile a `bin\` como arriba o use WSL.
 
 Con `make`: `make build`, `make race`, `make cover`, `make demo`, `make bench`.
 

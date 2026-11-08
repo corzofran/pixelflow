@@ -52,6 +52,19 @@ type Config struct {
 	// desde varias goroutines codificadoras a la vez: debe ser segura para
 	// uso concurrente.
 	OnResult func(Result)
+
+	// OnStage, si no es nil, se invoca cada vez que una imagen (por su
+	// índice) completa una etapa: StageList justo antes de que el lister la envíe,
+	// StageDecode, StageFilter y StageEncode. Igual que OnResult, se llama
+	// desde varias goroutines y debe ser segura para uso concurrente y
+	// rápida (se ejecuta en la ruta caliente).
+	OnStage func(stage Stage, index int)
+}
+
+func (c *Config) notify(s Stage, i int) {
+	if c.OnStage != nil {
+		c.OnStage(s, i)
+	}
 }
 
 // Result describe una imagen ya escrita.
@@ -176,15 +189,15 @@ func Run(ctx context.Context, cfg Config) (Stats, error) {
 	// cancelarse ctx. Cierra paths (único responsable).
 	g.Go(func() error {
 		defer close(paths)
-		return lister(ctx, cfg.InputDir, paths, &cnt)
+		return lister(ctx, &cfg, paths, &cnt)
 	})
 	// Etapa 2 · decodificar (fan-out de paths). Cierra decodedCh su closer.
 	stage(g, cfg.Decoders, func() { close(decodedCh) }, func() error {
-		return decodeWorker(ctx, paths, decodedCh, &cnt)
+		return decodeWorker(ctx, &cfg, paths, decodedCh, &cnt)
 	})
 	// Etapa 3 · filtrar (fan-out de decodedCh, fan-in a filteredCh).
 	stage(g, cfg.Workers, func() { close(filteredCh) }, func() error {
-		return filterWorker(ctx, cfg.Chain, cfg.Strips, decodedCh, filteredCh, &cnt)
+		return filterWorker(ctx, &cfg, decodedCh, filteredCh, &cnt)
 	})
 	// Etapa 4 · codificar y escribir (fan-in final; no produce canal).
 	stage(g, cfg.Encoders, nil, func() error {
@@ -197,15 +210,18 @@ func Run(ctx context.Context, cfg Config) (Stats, error) {
 
 // lister envía cada ruta de la carpeta, en orden, a out. No cierra out: lo
 // hace quien lo lanzó (único responsable).
-func lister(ctx context.Context, dir string, out chan<- job, cnt *counters) error {
+func lister(ctx context.Context, cfg *Config, out chan<- job, cnt *counters) error {
 	t := time.Now()
-	list, err := imgio.List(dir)
+	list, err := imgio.List(cfg.InputDir)
 	cnt.track(StageList, t)
 	if err != nil {
 		return err
 	}
 	cnt.listed.Store(int64(len(list)))
 	for i, p := range list {
+		// Se notifica antes de enviar: después del envío un decodificador
+		// podría notificar StageDecode antes que el lister (orden invertido).
+		cfg.notify(StageList, i)
 		select {
 		case out <- job{index: i, path: p}:
 		case <-ctx.Done():
@@ -218,7 +234,7 @@ func lister(ctx context.Context, dir string, out chan<- job, cnt *counters) erro
 // decodeWorker recibe rutas y envía imágenes decodificadas. Las firmas con
 // canales direccionales impiden, en compilación, que un worker cierre o lea
 // de su canal de salida.
-func decodeWorker(ctx context.Context, in <-chan job, out chan<- decoded, cnt *counters) error {
+func decodeWorker(ctx context.Context, cfg *Config, in <-chan job, out chan<- decoded, cnt *counters) error {
 	for {
 		var j job
 		var ok bool
@@ -237,6 +253,7 @@ func decodeWorker(ctx context.Context, in <-chan job, out chan<- decoded, cnt *c
 			return err
 		}
 		cnt.enter()
+		cfg.notify(StageDecode, j.index)
 		select {
 		case out <- decoded{job: j, img: img, format: format}:
 		case <-ctx.Done():
@@ -246,7 +263,7 @@ func decodeWorker(ctx context.Context, in <-chan job, out chan<- decoded, cnt *c
 }
 
 // filterWorker aplica la cadena de filtros (etapa limitada por CPU).
-func filterWorker(ctx context.Context, chain filters.Chain, strips int, in <-chan decoded, out chan<- filtered, cnt *counters) error {
+func filterWorker(ctx context.Context, cfg *Config, in <-chan decoded, out chan<- filtered, cnt *counters) error {
 	for {
 		var d decoded
 		var ok bool
@@ -259,8 +276,9 @@ func filterWorker(ctx context.Context, chain filters.Chain, strips int, in <-cha
 			return ctx.Err()
 		}
 		t := time.Now()
-		img := chain.Apply(filters.ToRGBA(d.img), strips)
+		img := cfg.Chain.Apply(filters.ToRGBA(d.img), cfg.Strips)
 		cnt.track(StageFilter, t)
+		cfg.notify(StageFilter, d.index)
 		select {
 		case out <- filtered{job: d.job, img: img, format: d.format}:
 		case <-ctx.Done():
@@ -291,6 +309,7 @@ func encodeWorker(ctx context.Context, cfg *Config, in <-chan filtered, cnt *cou
 			return err
 		}
 		cnt.processed.Add(1)
+		cfg.notify(StageEncode, f.index)
 		if cfg.OnResult != nil {
 			cfg.OnResult(Result{Index: f.index, Input: f.path, Output: outPath})
 		}
@@ -361,15 +380,18 @@ func RunSequential(ctx context.Context, cfg Config) (Stats, error) {
 		if err := ctx.Err(); err != nil {
 			return cnt.snapshot(time.Since(start)), err
 		}
+		cfg.notify(StageList, i)
 		t = time.Now()
 		img, format, err := imgio.Decode(p)
 		cnt.track(StageDecode, t)
 		if err != nil {
 			return cnt.snapshot(time.Since(start)), err
 		}
+		cfg.notify(StageDecode, i)
 		t = time.Now()
 		out := cfg.Chain.Apply(filters.ToRGBA(img), cfg.Strips)
 		cnt.track(StageFilter, t)
+		cfg.notify(StageFilter, i)
 		t = time.Now()
 		outPath := imgio.OutputName(cfg.OutputDir, p, format)
 		err = imgio.Encode(outPath, out, format, cfg.Quality)
@@ -378,6 +400,7 @@ func RunSequential(ctx context.Context, cfg Config) (Stats, error) {
 			return cnt.snapshot(time.Since(start)), err
 		}
 		cnt.processed.Add(1)
+		cfg.notify(StageEncode, i)
 		if cfg.OnResult != nil {
 			cfg.OnResult(Result{Index: i, Input: p, Output: outPath})
 		}

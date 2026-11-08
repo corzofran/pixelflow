@@ -323,3 +323,40 @@ func TestStageNamesAndOrder(t *testing.T) {
 		t.Fatalf("índices inesperados: %v", got)
 	}
 }
+
+// TestOnStageOrder: cada imagen pasa por las cuatro etapas exactamente una
+// vez y en orden (listar < decodificar < filtrar < codificar), tanto en la
+// versión concurrente como en la secuencial.
+func TestOnStageOrder(t *testing.T) {
+	checkNoLeaks(t)
+	const n = 30
+	in := dataset(t, n)
+	for _, seq := range []bool{false, true} {
+		var mu sync.Mutex
+		seen := map[int][]Stage{}
+		cfg := Config{
+			InputDir: in, OutputDir: filepath.Join(t.TempDir(), "o"), Chain: mustChain(t, "gray"),
+			Decoders: 3, Workers: 5, Encoders: 3, Buffer: 1,
+			OnStage: func(s Stage, i int) {
+				mu.Lock()
+				defer mu.Unlock()
+				seen[i] = append(seen[i], s)
+			},
+		}
+		run := Run
+		if seq {
+			run = RunSequential
+		}
+		if _, err := run(context.Background(), cfg); err != nil {
+			t.Fatal(err)
+		}
+		if len(seen) != n {
+			t.Fatalf("seq=%v: %d índices", seq, len(seen))
+		}
+		for i, st := range seen {
+			if fmt.Sprint(st) != fmt.Sprint([]Stage{StageList, StageDecode, StageFilter, StageEncode}) {
+				t.Fatalf("seq=%v: imagen %d recorrió %v", seq, i, st)
+			}
+		}
+	}
+}
